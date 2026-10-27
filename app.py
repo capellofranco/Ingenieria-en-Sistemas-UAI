@@ -23,12 +23,12 @@ df = st.session_state.df_materias
 
 # Función para guardar cambios en GitHub y actualizar estado local
 def save_to_github(updated_df):
-  # Actualizamos inmediatamente el estado en memoria
+  # 1. Actualizamos el estado local en la sesión al instante
   st.session_state.df_materias = updated_df
 
+  # 2. Validamos que los Secrets estén configurados
   if "GITHUB_TOKEN" not in st.secrets or "REPO_NAME" not in st.secrets:
-    # Si no están configurados los secrets, guarda solo de forma local
-    updated_df.to_csv("materias.csv", index=False)
+    st.error("❌ Faltan configurar GITHUB_TOKEN o REPO_NAME en los Secrets de Streamlit Cloud.")
     return
 
   token = st.secrets["GITHUB_TOKEN"]
@@ -38,22 +38,28 @@ def save_to_github(updated_df):
 
   headers = {"Authorization": f"token {token}"}
 
-  # Obtener el SHA del archivo actual en GitHub
+  # 3. Consultamos el archivo actual para obtener su SHA (requerido por GitHub para actualizar)
   res = requests.get(url, headers=headers)
   if res.status_code == 200:
     sha = res.json()["sha"]
     csv_content = updated_df.to_csv(index=False)
-    encoded_content = base64.b64encode(csv_content.encode("utf-8")).decode(
-        "utf-8"
-    )
+    encoded_content = base64.b64encode(csv_content.encode("utf-8")).decode("utf-8")
 
     data = {
         "message": "Actualización automática de notas desde Streamlit",
         "content": encoded_content,
         "sha": sha,
     }
-    requests.put(url, json=data, headers=headers)
+    
+    # 4. Enviamos los cambios a GitHub
+    put_res = requests.put(url, json=data, headers=headers)
 
+    if put_res.status_code in [200, 201]:
+      st.success("¡Guardado en GitHub exitosamente!")
+    else:
+      st.error(f"Error de GitHub ({put_res.status_code}): {put_res.text}")
+  else:
+    st.error(f"No se pudo conectar al repositorio ({res.status_code}): {res.text}")
 
 # 3. Encabezado principal
 st.title("🎓 Plan de Estudio - Ingeniería en Sistemas")
