@@ -9,17 +9,23 @@ st.set_page_config(
 )
 
 
-# 2. Cargar datos
+# 2. Cargar datos con persistencia en st.session_state
 @st.cache_data
-def load_data():
+def load_csv_data():
   return pd.read_csv("materias.csv")
 
 
-df = load_data()
+if "df_materias" not in st.session_state:
+  st.session_state.df_materias = load_csv_data()
+
+df = st.session_state.df_materias
 
 
-# Función para guardar cambios en GitHub
+# Función para guardar cambios en GitHub y actualizar estado local
 def save_to_github(updated_df):
+  # Actualizamos inmediatamente el estado en memoria
+  st.session_state.df_materias = updated_df
+
   if "GITHUB_TOKEN" not in st.secrets or "REPO_NAME" not in st.secrets:
     # Si no están configurados los secrets, guarda solo de forma local
     updated_df.to_csv("materias.csv", index=False)
@@ -122,12 +128,17 @@ def render_materia_card(row):
         st.write("")
         st.write("")
         if st.button("Guardar", key=f"btn_{m_id}", use_container_width=True):
-          df.loc[df["id"] == m_id, "estado"] = nuevo_estado
-          df.loc[df["id"] == m_id, "nota"] = (
-              nueva_nota if nuevo_estado == "Aprobada" else 0
-          )
-          save_to_github(df)
+          # Modificamos directamente el DataFrame dentro de session_state
+          st.session_state.df_materias.loc[
+              st.session_state.df_materias["id"] == m_id, "estado"
+          ] = nuevo_estado
+          st.session_state.df_materias.loc[
+              st.session_state.df_materias["id"] == m_id, "nota"
+          ] = (nueva_nota if nuevo_estado == "Aprobada" else 0)
+
+          save_to_github(st.session_state.df_materias)
           st.cache_data.clear()
+          st.success("¡Guardado correctamente!")
           st.rerun()
 
 
